@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SAM Template for AWS Elemental MediaConvert
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: dotnetcore3.1
+    MemorySize: 256
+
+Resources:
+  ConvertVideoFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: ./src/ConvertVideo/
+      Handler: ConvertVideo::ConvertVideo.Function::FunctionHandler
+      Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
+        Variables:
+          MC_ROLE: !GetAtt MediaConvertRole.Arn
+      Events:
+        UploadVideoEvent:
+          Type: S3
+          Properties:
+            Bucket: !Ref VideoBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: upload/
+                  - Name: suffix
+                    Value: .mp4
+      Policies:
+      - Statement:
+        - Sid: ElementalCrudPolicy
+          Effect: Allow
+          Action:
+          - mediaconvert:DescribeEndpoints
+          - mediaconvert:ListJobs
+          - mediaconvert:ListQueues
+          - mediaconvert:CreateJob
+          Resource: '*'
+        - Sid: PassRole
+          Effect: Allow
+          Action:
+            - iam:PassRole
+          Resource: 
+            - !GetAtt MediaConvertRole.Arn
+            
+  VideoBucket:
+    Type: AWS::S3::Bucket
+
+  MediaConvertRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Service role AWS Elemental Media Convert.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service: mediaconvert.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      RoleName: MediaConvertServiceRole 
+
+Outputs:
+  ConvertVideoFunction:
+    Description: "Convert Video Lambda Function ARN"
+    Value: !GetAtt ConvertVideoFunction.Arn
+  ConvertVideoFunctionIamRole:
+    Description: "Implicit IAM Role created for Convert Video function"
+    Value: !GetAtt ConvertVideoFunctionRole.Arn
